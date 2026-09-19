@@ -13,16 +13,24 @@ builder.Services.AddOptions<ConsolidatorConfigOptions>()
     .Validate(o => o.BatchSize > 0, "BatchSize must be greater than zero.")
     .Validate(o => o.FlushIntervalSeconds > 0, "FlushIntervalSeconds must be greater than zero.")
     .ValidateOnStart();
+
+builder.Services.AddSingleton<OffsetTracker>();
+
 builder.Services.AddSingleton<IConsumer<string, string>>(sp =>
 {
     var opts = sp.GetRequiredService<IOptions<KafkaConfigOptions>>().Value;
+    var tracker = sp.GetRequiredService<OffsetTracker>();
+
     return new ConsumerBuilder<string, string>(new ConsumerConfig
     {
         BootstrapServers = opts.BootstrapServers,
         GroupId = opts.ConsumerGroupId,
         AutoOffsetReset = AutoOffsetReset.Earliest,
         EnableAutoCommit = false
-    }).Build();
+    })
+    .SetPartitionsRevokedHandler((_, revoked) =>
+        tracker.ForgetPartitions(revoked.Select(r => r.TopicPartition)))
+    .Build();
 });
 
 builder.Services.AddSingleton<IProducer<string, string>>(sp =>

@@ -5,12 +5,15 @@ public class Worker(
     IServiceScopeFactory serviceScopeFactory,
     IOptions<KafkaConfigOptions> kafkaConfigOptions,
     IOptions<ConsolidatorConfigOptions> consolidatorOptions,
-    IConsumer<string, string> consumer) : BackgroundService
+    IConsumer<string, string> consumer,
+    OffsetTracker offsets,
+    IHostApplicationLifetime lifetime) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var topic = kafkaConfigOptions.Value.CalculatedTopic;
         var batchSize = consolidatorOptions.Value.BatchSize;
+        var maxBuffered = batchSize * 10;
         var flushInterval = TimeSpan.FromSeconds(consolidatorOptions.Value.FlushIntervalSeconds);
 
         consumer.Subscribe(topic);
@@ -18,86 +21,142 @@ public class Worker(
 
         var buffer = new List<ProcessedRow>();
         var batchIds = new HashSet<string>();
-        var offsets = new Dictionary<TopicPartition, Offset>();
         var lastFlush = DateTimeOffset.UtcNow;
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            var cr = consumer.Consume(TimeSpan.FromSeconds(1));
-
-            if (cr is not null)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                try
-                {
-                    var calculated = JsonSerializer.Deserialize<CommissionCalculated>(cr.Message.Value)
-                        ?? throw new InvalidOperationException("Message deserialized to null");
+                var cr = consumer.Consume(TimeSpan.FromSeconds(1));
 
-                    buffer.Add(new ProcessedRow
+                if (cr is not null)
+                {
+                    try
                     {
-                        RowId = calculated.RowId,
-                        BatchId = calculated.BatchId,
-                        BrokerId = calculated.BrokerId,
-                        CommissionAmount = calculated.CommissionAmount,
-                        ProcessedAt = DateTimeOffset.UtcNow
-                    });
+                        var calculated = JsonSerializer.Deserialize<CommissionCalculated>(cr.Message.Value)
+                            ?? throw new InvalidOperationException("Message deserialized to null");
 
-                    batchIds.Add(calculated.BatchId);
-                    offsets[cr.TopicPartition] = cr.Offset;
+                        buffer.Add(new ProcessedRow
+                        {
+                            RowId = calculated.RowId,
+                            BatchId = calculated.BatchId,
+                            BrokerId = calculated.BrokerId,
+                            CommissionAmount = calculated.CommissionAmount,
+                            ProcessedAt = DateTimeOffset.UtcNow
+                        });
+
+                        batchIds.Add(calculated.BatchId);
+                        offsets.RecordSuccess(cr.TopicPartition, cr.Offset);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, 
+                        "Cannot parse message at partition {Partition} offset {Offset}.",
+                            cr.Partition.Value, cr.Offset.Value);
+                        
+                        if (offsets.RecordFailure(cr.TopicPartition, cr.Offset))
+                        {
+                            consumer.Pause([cr.TopicPartition]);
+                            logger.LogWarning(
+                                "Paused partition {Partition} at offset {Offset} until it can be dead-lettered",
+                                cr.Partition.Value, cr.Offset.Value);
+                        }
+                    }
                 }
-                catch (Exception ex)
+
+                var timeToFlush = DateTimeOffset.UtcNow - lastFlush >= flushInterval;
+
+                if (buffer.Count >= batchSize || (buffer.Count > 0 && timeToFlush))
                 {
-                    logger.LogError(ex, "Failed row at partition {Partition} offset {Offset}",
-                        cr.Partition.Value, cr.Offset.Value);
-                }
-            }
+                    var written = false;
 
-            var timeToFlush = DateTimeOffset.UtcNow - lastFlush >= flushInterval;
+                    try
+                    {
+                        await WriteAndCommitAsync(buffer, stoppingToken);
+                        written = true;
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Write failed, {Count} rows still buffered", buffer.Count);
 
-            if (buffer.Count >= batchSize || (buffer.Count > 0 && timeToFlush))
-            {
-                try
-                {
-                    await FlushAsync(buffer, batchIds, offsets, stoppingToken);
-                    buffer.Clear();
-                    batchIds.Clear();
-                    offsets.Clear();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Flush failed, {Count} rows still buffered", buffer.Count);
-                }
+                        if (buffer.Count >= maxBuffered)
+                        {
+                            logger.LogCritical(
+                                "Buffer has reached {Count} rows and the database is not accepting writes. Stopping.",
+                                buffer.Count);
+                            lifetime.StopApplication();
+                            break;
+                        }
+                    }
 
-                lastFlush = DateTimeOffset.UtcNow;
+                    if (written)
+                    {
+                        var completed = batchIds.ToList();
+
+                        buffer.Clear();
+                        batchIds.Clear();
+                        offsets.ClearAfterCommit();
+                        lastFlush = DateTimeOffset.UtcNow;
+
+                        await MarkCompleteAsync(completed, stoppingToken);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                    }
+                }
             }
         }
-
-        consumer.Close();
+        finally
+        {
+            consumer.Close();
+        }
     }
 
-    private async Task FlushAsync(
-        List<ProcessedRow> buffer,
-        HashSet<string> batchIds, 
-        Dictionary<TopicPartition, Offset> offsets,
-        CancellationToken stoppingToken)
+    private async Task WriteAndCommitAsync(List<ProcessedRow> buffer, CancellationToken ct)
     {
         using var scope = serviceScopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
- 
-        await repository.UpsertBatchAsync(buffer, stoppingToken);
-    
-        var toCommit = offsets
-            .Select(kv => new TopicPartitionOffset(kv.Key, kv.Value + 1))
-            .ToList();
-    
-        consumer.Commit(toCommit);
-        
+
+        await repository.UpsertBatchAsync(buffer, ct);
+
+        var toCommit = offsets.CalculateCommitOffsets();
+
+        if (toCommit.Count > 0)
+        {
+            consumer.Commit(toCommit);
+        }
+
         logger.LogInformation("Wrote {Count} rows", buffer.Count);
+    }
+
+    private async Task MarkCompleteAsync(List<string> batchIds, CancellationToken ct)
+    {
+        using var scope = serviceScopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
 
         foreach (var batchId in batchIds)
         {
-            if (await repository.TryMarkBatchCompleteAsync(batchId, stoppingToken))
+            try
             {
-                logger.LogInformation("Batch {BatchId} is COMPLETE", batchId);
+                if (await repository.TryMarkBatchCompleteAsync(batchId, ct))
+                {
+                    logger.LogInformation("Batch {BatchId} is COMPLETE", batchId);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Could not check completion for batch {BatchId}", batchId);
             }
         }
     }
