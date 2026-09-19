@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-Commissions.Ingestor-9bdf170a-4fce-446c-bcde-cad5644528d9</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Commissions.Core\Commissions.Core.csproj" />
+    <ProjectReference Include="..\Commissions.Contracts\Commissions.Contracts.csproj" />
+    <ProjectReference Include="..\Commissions.Infrastructure\Commissions.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

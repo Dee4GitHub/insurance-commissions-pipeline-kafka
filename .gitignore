@@ -1,0 +1,45 @@
+# Secrets and local config
+.env
+
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+
+# Rider, Visual Studio, VS Code
+.vs/
+.idea/
+.vscode/
+
+# Test results and coverage
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+*.coverage
+
+# NuGet
+*.nupkg
+packages/
+.nuget/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Large generated data. The 50-row practice file IS committed; the million-row
+# one is generated on demand and would be about 60MB.
+data/commissions_1m.csv
+
+# Personal study notes and build specs. These are my own working documents -
+# they quote conversations, record dead ends, and are not project documentation.
+# The README covers everything a reader of this repo needs.
+KAFKA_SPEC_01.md
+KAFKA_SPEC_02_ARCHITECTURE.md
+KAFKA_SPEC_03_PIPELINE.md
+KAFKA_CONCEPTS_NOTES.md
+KAFKA_BUILD_LOG.md
