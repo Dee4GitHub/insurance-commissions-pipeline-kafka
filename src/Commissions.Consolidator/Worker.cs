@@ -18,6 +18,7 @@ public class Worker(
 
         var buffer = new List<ProcessedRow>();
         var batchIds = new HashSet<string>();
+        var offsets = new Dictionary<TopicPartition, Offset>();
         var lastFlush = DateTimeOffset.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -41,6 +42,7 @@ public class Worker(
                     });
 
                     batchIds.Add(calculated.BatchId);
+                    offsets[cr.TopicPartition] = cr.Offset;
                 }
                 catch (Exception ex)
                 {
@@ -53,9 +55,18 @@ public class Worker(
 
             if (buffer.Count >= batchSize || (buffer.Count > 0 && timeToFlush))
             {
-                await FlushAsync(buffer, batchIds, stoppingToken);
-                buffer.Clear();
-                batchIds.Clear();
+                try
+                {
+                    await FlushAsync(buffer, batchIds, offsets, stoppingToken);
+                    buffer.Clear();
+                    batchIds.Clear();
+                    offsets.Clear();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Flush failed, {Count} rows still buffered", buffer.Count);
+                }
+
                 lastFlush = DateTimeOffset.UtcNow;
             }
         }
@@ -63,12 +74,23 @@ public class Worker(
         consumer.Close();
     }
 
-    private async Task FlushAsync(List<ProcessedRow> buffer,HashSet<string> batchIds ,CancellationToken stoppingToken)
+    private async Task FlushAsync(
+        List<ProcessedRow> buffer,
+        HashSet<string> batchIds, 
+        Dictionary<TopicPartition, Offset> offsets,
+        CancellationToken stoppingToken)
     {
         using var scope = serviceScopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
+ 
         await repository.UpsertBatchAsync(buffer, stoppingToken);
-        consumer.Commit();
+    
+        var toCommit = offsets
+            .Select(kv => new TopicPartitionOffset(kv.Key, kv.Value + 1))
+            .ToList();
+    
+        consumer.Commit(toCommit);
+        
         logger.LogInformation("Wrote {Count} rows", buffer.Count);
 
         foreach (var batchId in batchIds)
