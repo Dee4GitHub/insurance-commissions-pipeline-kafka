@@ -65,9 +65,11 @@ public class OffsetTracker
 
     public void ForgetPartitions(IEnumerable<TopicPartition> partitions)
     {
+        var toForget = partitions.ToList();
+
         lock (_gate)
         {
-            foreach (var partition in partitions)
+            foreach (var partition in toForget)
             {
                 _lastGood.Remove(partition);
                 _firstFailed.Remove(partition);

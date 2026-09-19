@@ -42,4 +42,14 @@ public class CommissionsRepository : ICommissionRepository
 
         return affected == 1;         
     }
+
+    public async Task<IReadOnlyCollection<string>> FindCompletableBatchesAsync(CancellationToken ct)
+    {
+        return await _dbContext.Batches
+            .AsNoTracking()
+            .Where(b => b.Status != "Complete")
+            .Where(b => _dbContext.ProcessedRows.Count(p => p.BatchId == b.BatchId) >= b.ExpectedRowCount)
+            .Select(b => b.BatchId)
+            .ToListAsync(ct);
+    }
 }

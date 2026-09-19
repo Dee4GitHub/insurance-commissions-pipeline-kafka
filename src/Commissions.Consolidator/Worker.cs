@@ -9,12 +9,15 @@ public class Worker(
     OffsetTracker offsets,
     IHostApplicationLifetime lifetime) : BackgroundService
 {
+    private DateTimeOffset _lastSweep = DateTimeOffset.UtcNow;
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var topic = kafkaConfigOptions.Value.CalculatedTopic;
         var batchSize = consolidatorOptions.Value.BatchSize;
-        var maxBuffered = batchSize * 10;
         var flushInterval = TimeSpan.FromSeconds(consolidatorOptions.Value.FlushIntervalSeconds);
+        var maxConsecutiveFailures = 10;
+        var sweepInterval = TimeSpan.FromSeconds(30);
+        var consecutiveFailures = 0;
 
         consumer.Subscribe(topic);
         logger.LogInformation("Subscribed to {Topic}", topic);
@@ -73,6 +76,7 @@ public class Worker(
                     {
                         await WriteAndCommitAsync(buffer, stoppingToken);
                         written = true;
+                        consecutiveFailures = 0;
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -80,13 +84,17 @@ public class Worker(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Write failed, {Count} rows still buffered", buffer.Count);
+                        consecutiveFailures++;
 
-                        if (buffer.Count >= maxBuffered)
+                        logger.LogError(ex,
+                            "Write failed ({Failures} in a row), {Count} rows still buffered",
+                            consecutiveFailures, buffer.Count);
+
+                        if (consecutiveFailures >= maxConsecutiveFailures)
                         {
                             logger.LogCritical(
-                                "Buffer has reached {Count} rows and the database is not accepting writes. Stopping.",
-                                buffer.Count);
+                                "The database has rejected {Failures} consecutive writes. Stopping.",
+                                consecutiveFailures);
                             lifetime.StopApplication();
                             break;
                         }
@@ -115,11 +123,41 @@ public class Worker(
                         }
                     }
                 }
+
+                if (DateTimeOffset.UtcNow - _lastSweep >= sweepInterval)
+                {
+                    _lastSweep = DateTimeOffset.UtcNow;
+                    await SweepStuckBatchesAsync(stoppingToken);
+                }
             }
         }
         finally
         {
             consumer.Close();
+        }
+    }
+
+    private async Task SweepStuckBatchesAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
+
+            var completable = await repository.FindCompletableBatchesAsync(ct);
+
+            if (completable.Count > 0)
+            {
+                logger.LogInformation(
+                    "Sweep found {Count} batches with all rows written but not marked complete",
+                    completable.Count);
+
+                await MarkCompleteAsync(completable.ToList(), ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Batch completion sweep failed");
         }
     }
 
