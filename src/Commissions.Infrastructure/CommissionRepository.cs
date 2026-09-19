@@ -8,26 +8,38 @@ public class CommissionsRepository : ICommissionRepository
         _dbContext = dbContext;
     }
 
-public async Task UpsertAsync(ProcessedRow row, CancellationToken ct)
-{
-    await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-        MERGE INTO ProcessedRows WITH (HOLDLOCK) AS T
-        USING (VALUES ({row.RowId}, {row.BatchId}, {row.BrokerId},
-                       {row.CommissionAmount}, {row.ProcessedAt}))
-              AS S (RowId, BatchId, BrokerId, CommissionAmount, ProcessedAt)
-        ON  T.RowId   = S.RowId
-        AND T.BatchId = S.BatchId
-        WHEN MATCHED THEN
-            UPDATE SET BrokerId         = S.BrokerId,
-                       CommissionAmount = S.CommissionAmount,
-                       ProcessedAt      = S.ProcessedAt
-        WHEN NOT MATCHED THEN
-            INSERT (RowId, BatchId, BrokerId, CommissionAmount, ProcessedAt)
-            VALUES (S.RowId, S.BatchId, S.BrokerId, S.CommissionAmount, S.ProcessedAt);", ct);
-}
+    public async Task UpsertBatchAsync(IReadOnlyCollection<ProcessedRow> rows, CancellationToken ct)
+        => await _dbContext.BulkInsertOrUpdateAsync(rows, cancellationToken: ct);
 
     public async Task<int> CountForBatchAsync(string batchId, CancellationToken ct)
     {
         return await _dbContext.ProcessedRows.CountAsync(r => r.BatchId == batchId, ct);
+    }
+
+    public async Task<bool> TryMarkBatchCompleteAsync(string batchId, CancellationToken ct)
+    {
+        var batch = await _dbContext.Batches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.BatchId == batchId, ct);
+
+        if (batch is null)
+        {
+            return false;
+        }
+
+        var processedCount = await CountForBatchAsync(batchId, ct);
+
+        if (processedCount < batch.ExpectedRowCount)
+        {
+            return false;
+        }
+
+        var affected = await _dbContext.Batches
+            .Where(b => b.BatchId == batchId && b.Status != "Complete")
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(b => b.Status, "Complete")
+                .SetProperty(b => b.CompletedAt, DateTimeOffset.UtcNow), ct);
+
+        return affected == 1;         
     }
 }
