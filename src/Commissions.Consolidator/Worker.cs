@@ -142,22 +142,38 @@ public class Worker(
 
     private async Task MarkCompleteAsync(List<string> batchIds, CancellationToken ct)
     {
-        using var scope = serviceScopeFactory.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
-
-        foreach (var batchId in batchIds)
+        try
         {
-            try
+            using var scope = serviceScopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
+
+            foreach (var batchId in batchIds)
             {
-                if (await repository.TryMarkBatchCompleteAsync(batchId, ct))
+                if (ct.IsCancellationRequested)
                 {
-                    logger.LogInformation("Batch {BatchId} is COMPLETE", batchId);
+                    break;
+                }
+
+                try
+                {
+                    if (await repository.TryMarkBatchCompleteAsync(batchId, ct))
+                    {
+                        logger.LogInformation("Batch {BatchId} is COMPLETE", batchId);
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Could not check completion for batch {BatchId}", batchId);
                 }
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Could not check completion for batch {BatchId}", batchId);
-            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not check batch completion");
         }
     }
 }

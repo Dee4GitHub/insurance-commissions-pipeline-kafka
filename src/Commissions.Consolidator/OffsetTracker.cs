@@ -1,51 +1,77 @@
 namespace Commissions.Consolidator;
 
+// Called from the worker loop and from the Kafka partitions-revoked handler.
+// Confluent.Kafka currently dispatches that handler from inside Consume(), on the
+// same thread as the loop, so these would be safe without the lock - but that is a
+// property of the client's dispatch model, not of this class. The lock makes the
+// safety explicit and costs nothing at one call per message.
 public class OffsetTracker
 {
+    private readonly Lock _gate = new();
     private readonly Dictionary<TopicPartition, Offset> _lastGood = new();
     private readonly Dictionary<TopicPartition, Offset> _firstFailed = new();
 
     public void RecordSuccess(TopicPartition partition, Offset offset)
-        => _lastGood[partition] = offset;
+    {
+        lock (_gate)
+        {
+            _lastGood[partition] = offset;
+        }
+    }
 
     public bool RecordFailure(TopicPartition partition, Offset offset)
     {
-        if (_firstFailed.ContainsKey(partition))
+        lock (_gate)
         {
-            return false;
-        }
+            if (_firstFailed.ContainsKey(partition))
+            {
+                return false;
+            }
 
-        _firstFailed[partition] = offset;
-        return true;
+            _firstFailed[partition] = offset;
+            return true;
+        }
     }
 
     public List<TopicPartitionOffset> CalculateCommitOffsets()
     {
-        var toCommit = new List<TopicPartitionOffset>();
-
-        foreach (var (partition, offset) in _lastGood)
+        lock (_gate)
         {
-            var safe = offset + 1;
+            var toCommit = new List<TopicPartitionOffset>();
 
-            if (_firstFailed.TryGetValue(partition, out var failed) && failed < safe)
+            foreach (var (partition, offset) in _lastGood)
             {
-                safe = failed;
+                var safe = offset + 1;
+
+                if (_firstFailed.TryGetValue(partition, out var failed) && failed < safe)
+                {
+                    safe = failed;
+                }
+
+                toCommit.Add(new TopicPartitionOffset(partition, safe));
             }
 
-            toCommit.Add(new TopicPartitionOffset(partition, safe));
+            return toCommit;
         }
-
-        return toCommit;
     }
 
-    public void ClearAfterCommit() => _lastGood.Clear();
+    public void ClearAfterCommit()
+    {
+        lock (_gate)
+        {
+            _lastGood.Clear();
+        }
+    }
 
     public void ForgetPartitions(IEnumerable<TopicPartition> partitions)
     {
-        foreach (var partition in partitions)
+        lock (_gate)
         {
-            _lastGood.Remove(partition);
-            _firstFailed.Remove(partition);
+            foreach (var partition in partitions)
+            {
+                _lastGood.Remove(partition);
+                _firstFailed.Remove(partition);
+            }
         }
     }
 }
