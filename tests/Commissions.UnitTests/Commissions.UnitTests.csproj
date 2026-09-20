@@ -8,10 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector"/>
-    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
-    <PackageReference Include="xunit"/>
-    <PackageReference Include="xunit.runner.visualstudio"/>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Commissions.Core\Commissions.Core.csproj" />
     <ProjectReference Include="..\..\src\Commissions.Contracts\Commissions.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Commissions.Consolidator\Commissions.Consolidator.csproj" />
   </ItemGroup>
 
 </Project>

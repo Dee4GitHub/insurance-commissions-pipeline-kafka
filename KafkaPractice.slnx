@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Commissions.Calculator/Commissions.Calculator.csproj" />
+    <Project Path="src/Commissions.Consolidator/Commissions.Consolidator.csproj" />
     <Project Path="src/Commissions.Contracts/Commissions.Contracts.csproj" />
     <Project Path="src/Commissions.Core/Commissions.Core.csproj" />
     <Project Path="src/Commissions.Infrastructure/Commissions.Infrastructure.csproj" />
