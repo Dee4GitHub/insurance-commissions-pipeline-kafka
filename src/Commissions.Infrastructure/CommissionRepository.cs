@@ -18,29 +18,15 @@ public class CommissionsRepository : ICommissionRepository
 
     public async Task<bool> TryMarkBatchCompleteAsync(string batchId, CancellationToken ct)
     {
-        var batch = await _dbContext.Batches
-            .AsNoTracking()
-            .FirstOrDefaultAsync(b => b.BatchId == batchId, ct);
+        var affected = await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE Batches
+            SET    Status = 'Complete', CompletedAt = SYSDATETIMEOFFSET()
+            WHERE  BatchId = {batchId}
+              AND  Status <> 'Complete'
+              AND  (SELECT COUNT(*) FROM ProcessedRows WHERE BatchId = {batchId})
+                   = ExpectedRowCount", ct);
 
-        if (batch is null)
-        {
-            return false;
-        }
-
-        var processedCount = await CountForBatchAsync(batchId, ct);
-
-        if (processedCount < batch.ExpectedRowCount)
-        {
-            return false;
-        }
-
-        var affected = await _dbContext.Batches
-            .Where(b => b.BatchId == batchId && b.Status != "Complete")
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(b => b.Status, "Complete")
-                .SetProperty(b => b.CompletedAt, DateTimeOffset.UtcNow), ct);
-
-        return affected == 1;         
+        return affected == 1;
     }
 
     public async Task<IReadOnlyCollection<string>> FindCompletableBatchesAsync(CancellationToken ct)
@@ -48,7 +34,7 @@ public class CommissionsRepository : ICommissionRepository
         return await _dbContext.Batches
             .AsNoTracking()
             .Where(b => b.Status != "Complete")
-            .Where(b => _dbContext.ProcessedRows.Count(p => p.BatchId == b.BatchId) >= b.ExpectedRowCount)
+            .Where(b => _dbContext.ProcessedRows.Count(p => p.BatchId == b.BatchId) == b.ExpectedRowCount)
             .Select(b => b.BatchId)
             .ToListAsync(ct);
     }

@@ -15,9 +15,10 @@ public class Worker(
         var topic = kafkaConfigOptions.Value.CalculatedTopic;
         var batchSize = consolidatorOptions.Value.BatchSize;
         var flushInterval = TimeSpan.FromSeconds(consolidatorOptions.Value.FlushIntervalSeconds);
-        var maxConsecutiveFailures = 10;
+        var maxFailureDuration = TimeSpan.FromMinutes(15);
         var sweepInterval = TimeSpan.FromSeconds(30);
         var consecutiveFailures = 0;
+        DateTimeOffset? failingSince = null;
 
         consumer.Subscribe(topic);
         logger.LogInformation("Subscribed to {Topic}", topic);
@@ -77,6 +78,7 @@ public class Worker(
                         await WriteAndCommitAsync(buffer, stoppingToken);
                         written = true;
                         consecutiveFailures = 0;
+                        failingSince = null;
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -85,16 +87,17 @@ public class Worker(
                     catch (Exception ex)
                     {
                         consecutiveFailures++;
+                        failingSince ??= DateTimeOffset.UtcNow;
 
                         logger.LogError(ex,
                             "Write failed ({Failures} in a row), {Count} rows still buffered",
                             consecutiveFailures, buffer.Count);
 
-                        if (consecutiveFailures >= maxConsecutiveFailures)
+                        if (DateTimeOffset.UtcNow - failingSince >= maxFailureDuration)
                         {
                             logger.LogCritical(
-                                "The database has rejected {Failures} consecutive writes. Stopping.",
-                                consecutiveFailures);
+                                "The database has rejected writes for {Minutes} minutes. Stopping.",
+                                maxFailureDuration.TotalMinutes);
                             lifetime.StopApplication();
                             break;
                         }
@@ -124,7 +127,7 @@ public class Worker(
                     }
                 }
 
-                if (DateTimeOffset.UtcNow - _lastSweep >= sweepInterval)
+                if (consecutiveFailures == 0 && DateTimeOffset.UtcNow - _lastSweep >= sweepInterval)
                 {
                     _lastSweep = DateTimeOffset.UtcNow;
                     await SweepStuckBatchesAsync(stoppingToken);

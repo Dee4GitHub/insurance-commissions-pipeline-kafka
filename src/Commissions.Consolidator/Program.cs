@@ -26,7 +26,8 @@ builder.Services.AddSingleton<IConsumer<string, string>>(sp =>
         BootstrapServers = opts.BootstrapServers,
         GroupId = opts.ConsumerGroupId,
         AutoOffsetReset = AutoOffsetReset.Earliest,
-        EnableAutoCommit = false
+        EnableAutoCommit = false,
+        EnableAutoOffsetStore = false
     })
     .SetPartitionsRevokedHandler((_, revoked) =>
         tracker.ForgetPartitions(revoked.Select(r => r.TopicPartition)))
