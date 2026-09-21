@@ -53,10 +53,10 @@ public class Worker(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, 
+                        logger.LogError(ex,
                         "Cannot parse message at partition {Partition} offset {Offset}.",
                             cr.Partition.Value, cr.Offset.Value);
-                        
+
                         if (offsets.RecordFailure(cr.TopicPartition, cr.Offset))
                         {
                             consumer.Pause([cr.TopicPartition]);
@@ -197,10 +197,22 @@ public class Worker(
 
                 try
                 {
-                    if (await repository.TryMarkBatchCompleteAsync(batchId, ct))
+                    await using var tx = await repository.BeginTransactionAsync(ct);
+
+                    if (!await repository.TryMarkBatchCompleteAsync(batchId, tx, ct))
                     {
-                        logger.LogInformation("Batch {BatchId} is COMPLETE", batchId);
+                        continue;   // not ready, or someone else won. Dispose rolls back.
                     }
+
+                    var summary = await repository.GetBatchSummaryAsync(batchId, tx, ct);
+
+                    await repository.AddOutboxMessageAsync(
+                        BuildNotification(summary), tx, ct);
+
+                    await tx.CommitAsync(ct);
+
+                    logger.LogInformation(
+                        "Batch {BatchId} is COMPLETE, notification queued", batchId);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -217,4 +229,16 @@ public class Worker(
             logger.LogError(ex, "Could not check batch completion");
         }
     }
+
+    private static OutboxMessage BuildNotification(BatchSummary summary) => new()
+    {
+        MessageType = "BatchCompletedNotification",
+        AggregateId = summary.BatchId,
+        DedupeKey = $"batch-completed:{summary.BatchId}",
+        Payload = JsonSerializer.Serialize(summary),
+        OccurredAt = summary.CompletedAt,
+        AvailableAt = DateTimeOffset.UtcNow,
+        Status = OutboxStatus.Pending,
+        AttemptCount = 0
+    };
 }
