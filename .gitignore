@@ -38,8 +38,14 @@ data/commissions_1m.csv
 # Personal study notes and build specs. These are my own working documents -
 # they quote conversations, record dead ends, and are not project documentation.
 # The README covers everything a reader of this repo needs.
-KAFKA_SPEC_01.md
-KAFKA_SPEC_02_ARCHITECTURE.md
-KAFKA_SPEC_03_PIPELINE.md
+KAFKA_SPEC_*.md
+KAFKA_BUILD_STEP_*.md
 KAFKA_CONCEPTS_NOTES.md
 KAFKA_BUILD_LOG.md
+
+# Backups taken before editing the working specs above.
+*.prebackup
+
+# NOTE: docs/DESIGN.md is the PUBLIC design document and IS committed.
+# The files above are private working notes - they quote conversations and
+# record dead ends. Keep that split deliberate when adding new documents.
