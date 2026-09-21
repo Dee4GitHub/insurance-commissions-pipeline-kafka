@@ -1,3 +1,4 @@
+
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Commissions.Calculator/Commissions.Calculator.csproj" />
@@ -10,5 +11,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Commissions.UnitTests/Commissions.UnitTests.csproj" />
+    <Project Path="tests/Commissions.IntegrationTests/Commissions.IntegrationTests.csproj" />
   </Folder>
 </Solution>

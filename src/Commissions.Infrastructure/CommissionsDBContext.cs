@@ -1,4 +1,5 @@
 namespace Commissions.Infrastructure;
+
 public class CommissionsDBContext : DbContext
 {
     public CommissionsDBContext(DbContextOptions<CommissionsDBContext> options) : base(options)
@@ -8,7 +9,8 @@ public class CommissionsDBContext : DbContext
     public DbSet<RawRow> RawRows { get; set; } = default!;
     public DbSet<Batch> Batches { get; set; } = default!;
     public DbSet<ProcessedRow> ProcessedRows { get; set; } = default!;
-    public DbSet<BrokerTier> BrokerTiers {get; set;} = default!;
+    public DbSet<BrokerTier> BrokerTiers { get; set; } = default!;
+    public DbSet<OutboxMessage> OutboxMessages { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,7 +25,7 @@ public class CommissionsDBContext : DbContext
             .WithMany()
             .HasForeignKey(rr => rr.BatchId)
             .OnDelete(DeleteBehavior.Restrict);
-        
+
         modelBuilder.Entity<RawRow>()
             .Property(rr => rr.PremiumAmount)
             .HasPrecision(18, 2);
@@ -40,22 +42,58 @@ public class CommissionsDBContext : DbContext
 
         modelBuilder.Entity<ProcessedRow>()
             .Property(pr => pr.CommissionAmount)
-            .HasPrecision(18, 4);   
+            .HasPrecision(18, 4);
 
         modelBuilder.Entity<BrokerTier>()
             .HasKey(b => b.BrokerId);
-        
+
         modelBuilder.Entity<BrokerTier>()
             .Property(b => b.Multiplier)
-            .HasPrecision(18, 4); 
-        
+            .HasPrecision(18, 4);
+
         modelBuilder.Entity<BrokerTier>().HasData(
-            new BrokerTier { BrokerId = "B100", Tier = "Gold",     Multiplier = 1.20m },
-            new BrokerTier { BrokerId = "B200", Tier = "Silver",   Multiplier = 1.10m },
-            new BrokerTier { BrokerId = "B300", Tier = "Bronze",   Multiplier = 1.00m },
+            new BrokerTier { BrokerId = "B100", Tier = "Gold", Multiplier = 1.20m },
+            new BrokerTier { BrokerId = "B200", Tier = "Silver", Multiplier = 1.10m },
+            new BrokerTier { BrokerId = "B300", Tier = "Bronze", Multiplier = 1.00m },
             new BrokerTier { BrokerId = "B400", Tier = "Standard", Multiplier = 0.95m }
             );
 
+        modelBuilder.Entity<OutboxMessage>()
+            .HasKey(o => o.OutboxId);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .HasIndex(o => o.DedupeKey)
+            .IsUnique();
+
+        modelBuilder.Entity<OutboxMessage>()
+            .HasIndex(o => new { o.Status, o.AvailableAt });
+
+        modelBuilder.Entity<OutboxMessage>()
+            .HasIndex(o => o.AggregateId);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.MessageType)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.AggregateId)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.DedupeKey)
+            .HasMaxLength(200);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.PeriodKey)
+            .HasMaxLength(7);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.LockedBy)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<OutboxMessage>()
+            .Property(o => o.LastError)
+            .HasMaxLength(2000);
     }
 
-}   
+}
