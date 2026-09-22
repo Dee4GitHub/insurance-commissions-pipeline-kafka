@@ -80,6 +80,19 @@ public class Worker(
         NotifierConfigOptions config,
         CancellationToken ct)
     {
+        var suppression = await ShouldSuppressAsync(outbox, message, ct);
+
+        if (suppression is not null)
+        {
+            await outbox.MarkSuppressedAsync(message.OutboxId, suppression, ct);
+
+            logger.LogInformation(
+                "Notification for batch {BatchId} SUPPRESSED: {Reason}. This is a business " +
+                "decision, not a failure, and it will not be retried.",
+                message.AggregateId, suppression);
+
+            return;
+        }
         try
         {
             await sender.SendAsync(message.DedupeKey, message.Payload, ct);
@@ -126,5 +139,31 @@ public class Worker(
         var jitter = Random.Shared.NextDouble() * 0.2 * capped;
 
         return (int)(capped + jitter);
+    }
+
+    // Returns a reason to suppress, or null to send. A suppressed message is a BUSINESS
+    // outcome, not an error - it must never be retried, and it must read differently in
+    // the logs from something that broke.
+    private static async Task<string?> ShouldSuppressAsync(
+        IOutboxRepository outbox, OutboxMessage message, CancellationToken ct)
+    {
+        // Checked first: a pure field read, no database call needed to disqualify.
+        if (!message.IsPeriodCoherent)
+        {
+            return "the batch spans more than one accounting period";
+        }
+
+        if (message.PeriodKey is null)
+        {
+            // Written before periods existed. Nothing to check against.
+            return null;
+        }
+
+        if (!await outbox.IsPeriodOpenAsync(message.PeriodKey, ct))
+        {
+            return $"period {message.PeriodKey} is closed";
+        }
+
+        return null;
     }
 }

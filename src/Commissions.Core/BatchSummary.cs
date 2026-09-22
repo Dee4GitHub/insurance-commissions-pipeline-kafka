@@ -5,4 +5,6 @@ public record BatchSummary(
     string AgentEmail,
     int RowCount,
     decimal TotalCommission,
-    DateTimeOffset CompletedAt);
+    DateTimeOffset CompletedAt,
+    string? PeriodKey,
+    bool IsPeriodCoherent);

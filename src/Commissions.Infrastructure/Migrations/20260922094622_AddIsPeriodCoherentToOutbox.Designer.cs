@@ -4,6 +4,7 @@ using Commissions.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Commissions.Infrastructure.Migrations
 {
     [DbContext(typeof(CommissionsDBContext))]
-    partial class CommissionsDBContextModelSnapshot : ModelSnapshot
+    [Migration("20260922094622_AddIsPeriodCoherentToOutbox")]
+    partial class AddIsPeriodCoherentToOutbox
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -293,7 +296,7 @@ namespace Commissions.Infrastructure.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("decimal(18,6)");
 
-                    b.Property<DateTimeOffset?>("EffectiveDate")
+                    b.Property<DateTimeOffset>("EffectiveDate")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<bool>("IsParseable")
@@ -306,6 +309,7 @@ namespace Commissions.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PeriodKey")
+                        .IsRequired()
                         .HasMaxLength(7)
                         .HasColumnType("nchar(7)")
                         .IsFixedLength();

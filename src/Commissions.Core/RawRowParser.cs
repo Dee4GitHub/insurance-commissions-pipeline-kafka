@@ -6,12 +6,14 @@ public static class RawRowParser
     public static RawRow Parse(string line, long rowId, string batchId)
     {
         var parts = line.Split(',');
-        var rawRow = new RawRow();
+        var rawRow = new RawRow
+        {
+            RowId = rowId.ToString(),
+            BatchId = batchId,
+            RawLine = line,
+            LineNumber = rowId
+        };
 
-        rawRow.RowId = rowId.ToString();
-        rawRow.BatchId = batchId;
-        rawRow.RawLine = line;
-        rawRow.LineNumber = rowId;
 
         if (parts.Length != 6)
         {

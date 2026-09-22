@@ -53,14 +53,14 @@ public class Worker(
                     continue;
 
                 var rawLine = RawRowParser.Parse(line, lineNumber, batchId);
-                if (rawLine.IsParseable && !IsDateInRange(rawLine.EffectiveDate))
+                if (rawLine.IsParseable && !IsDateInRange(rawLine.EffectiveDate!.Value))
                 {
                     rawLine.IsParseable = false;
                     rawLine.ParseError =
                         $"EffectiveDate {rawLine.EffectiveDate:yyyy-MM-dd} is outside the accepted range";
                 }
 
-                if (rawLine.IsParseable && !openPeriods.Contains(rawLine.PeriodKey))
+                if (rawLine.IsParseable && !openPeriods.Contains(rawLine.PeriodKey!))
                 {
                     rawLine.IsParseable = false;
                     rawLine.ParseError = $"Period {rawLine.PeriodKey} is closed";
@@ -91,6 +91,7 @@ public class Worker(
             if (rawRows.Count > 0)
             {
                 await db.RawRows.AddRangeAsync(rawRows, stoppingToken);
+                await db.SaveChangesAsync(stoppingToken);
             }
             var periodKeys = await db.RawRows
                 .Where(r => r.BatchId == batchId && r.IsParseable)
@@ -148,7 +149,8 @@ public class Worker(
             {
                 var message = new CommissionRaw(
                     row.RowId, row.BrokerId!, row.PolicyNumber!,
-                    row.PremiumAmount!.Value, row.CommissionRate!.Value, batchId);
+                    row.PremiumAmount!.Value, row.CommissionRate!.Value, batchId,
+                    row.EffectiveDate!.Value, row.PeriodKey!);
 
                 await publisher.PublishAsync(topic, row.RowId!, message, ct);
                 published++;

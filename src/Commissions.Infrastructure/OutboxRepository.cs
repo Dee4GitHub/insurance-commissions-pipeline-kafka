@@ -68,4 +68,19 @@ public class OutboxRepository : IOutboxRepository
             WHERE  OutboxId = {outboxId}", ct);
     }
 
+    public async Task MarkSuppressedAsync(long outboxId, string reason, CancellationToken ct)
+    {
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE OutboxMessages
+            SET    Status = 3, LockedUntil = NULL, LockedBy = NULL,
+                   LastError = {reason}
+            WHERE  OutboxId = {outboxId}", ct);
+    }
+
+    public async Task<bool> IsPeriodOpenAsync(string periodKey, CancellationToken ct)
+    {
+        return await _dbContext.Periods
+            .AsNoTracking()
+            .AnyAsync(p => p.PeriodKey == periodKey && p.Status == PeriodStatus.Open, ct);
+    }
 }

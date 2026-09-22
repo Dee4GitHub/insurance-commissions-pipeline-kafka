@@ -43,6 +43,10 @@ KAFKA_BUILD_STEP_*.md
 KAFKA_CONCEPTS_NOTES.md
 KAFKA_BUILD_LOG.md
 
+# Worker run logs, written by run.bat
+output/
+run.bat
+
 # Backups taken before editing the working specs above.
 *.prebackup
 

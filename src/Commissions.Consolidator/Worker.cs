@@ -45,6 +45,9 @@ public class Worker(
                             BatchId = calculated.BatchId,
                             BrokerId = calculated.BrokerId,
                             CommissionAmount = calculated.CommissionAmount,
+                            EffectiveDate = calculated.EffectiveDate,
+                            PeriodKey = calculated.PeriodKey,
+                            RateAsOf = calculated.RateAsOf,
                             ProcessedAt = DateTimeOffset.UtcNow
                         });
 
@@ -239,6 +242,8 @@ public class Worker(
         OccurredAt = summary.CompletedAt,
         AvailableAt = DateTimeOffset.UtcNow,
         Status = OutboxStatus.Pending,
-        AttemptCount = 0
+        AttemptCount = 0,
+        PeriodKey = summary.PeriodKey,
+        IsPeriodCoherent = summary.IsPeriodCoherent
     };
 }

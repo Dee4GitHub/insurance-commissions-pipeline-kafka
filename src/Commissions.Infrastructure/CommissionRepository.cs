@@ -106,7 +106,9 @@ public class CommissionsRepository : ICommissionRepository
             batch.AgentEmail,
             rowCount,
             total,
-            batch.CompletedAt ?? DateTimeOffset.UtcNow);
+            batch.CompletedAt ?? DateTimeOffset.UtcNow,
+            batch.PeriodKey,
+            batch.IsPeriodCoherent);
     }
 
     public async Task AddOutboxMessageAsync(

@@ -13,7 +13,9 @@ public class CommissionsTests
             PolicyNumber: "POL-0010",
             PremiumAmount: 878.46m,
             CommissionRate: 0.15m,
-            BatchId: "batch101"
+            BatchId: "batch101",
+            EffectiveDate: new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero),
+            PeriodKey: "2026-08"
         );
 
 
@@ -35,7 +37,9 @@ public class CommissionsTests
             PolicyNumber: "POL-0003",
             PremiumAmount: 3989.3m,
             CommissionRate: 0.15m,
-            BatchId: "batch102"
+            BatchId: "batch102",
+            EffectiveDate: new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero),
+            PeriodKey: "2026-08"
         );
 
         // Act

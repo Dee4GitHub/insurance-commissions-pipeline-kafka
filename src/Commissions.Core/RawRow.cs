@@ -13,6 +13,6 @@ public class RawRow
     public string? PolicyNumber { get; set; }
     public decimal? PremiumAmount { get; set; }
     public decimal? CommissionRate { get; set; }
-    public DateTimeOffset EffectiveDate { get; set; }
-    public string PeriodKey { get; set; } = default!;
+    public DateTimeOffset? EffectiveDate { get; set; }
+    public string? PeriodKey { get; set; } = default!;
 }

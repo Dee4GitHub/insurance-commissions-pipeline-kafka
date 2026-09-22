@@ -5,7 +5,7 @@ public class Worker(
     IServiceScopeFactory serviceScopeFactory,
     IOptions<KafkaConfigOptions> kafkaConfigOptions,
     IMessagePublisher publisher,
-    IConsumer<string,string> consumer): BackgroundService
+    IConsumer<string, string> consumer) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,7 +33,8 @@ public class Worker(
                 var enriched = new CommissionEnriched(
                     raw.RowId, raw.BrokerId, raw.PolicyNumber,
                     raw.PremiumAmount, raw.CommissionRate,
-                    tier, multiplier, raw.BatchId);
+                    tier, multiplier, raw.BatchId, raw.EffectiveDate,
+                    raw.PeriodKey, DateTimeOffset.UtcNow);
 
                 await publisher.PublishAsync(enrichedTopic, raw.RowId, enriched, stoppingToken);
 

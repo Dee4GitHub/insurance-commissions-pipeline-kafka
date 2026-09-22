@@ -2,4 +2,5 @@ namespace Commissions.Contracts;
 
 public record CommissionCalculated(
     string RowId, string BrokerId, string PolicyNumber,
-    decimal CommissionAmount, string BatchId);
+    decimal CommissionAmount, string BatchId,
+    DateTimeOffset EffectiveDate, string PeriodKey, DateTimeOffset RateAsOf);

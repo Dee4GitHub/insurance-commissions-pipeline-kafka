@@ -17,4 +17,5 @@ public class OutboxMessage
     public string? LockedBy { get; set; }
     public DateTimeOffset? SentAt { get; set; }
     public DateTimeOffset? FailedAt { get; set; }
+    public bool IsPeriodCoherent { get; set; } = true;
 }
