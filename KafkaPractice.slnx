@@ -8,6 +8,7 @@
     <Project Path="src/Commissions.Infrastructure/Commissions.Infrastructure.csproj" />
     <Project Path="src/Commissions.Ingestor/Commissions.Ingestor.csproj" />
     <Project Path="src/Commissions.Lookup/Commissions.Lookup.csproj" />
+    <Project Path="src/Commissions.Notifier/Commissions.Notifier.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Commissions.UnitTests/Commissions.UnitTests.csproj" />
