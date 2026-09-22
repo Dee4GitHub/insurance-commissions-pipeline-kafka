@@ -1,4 +1,5 @@
 namespace Commissions.Core;
+
 public class Batch
 {
     public string BatchId { get; set; } = default!;      // PK, a Guid string
@@ -11,4 +12,6 @@ public class Batch
     public string Status { get; set; } = default!;       // Loading|Processing|Complete|Failed
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset? NotifiedAt { get; set; }      // <- the email idempotency marker
+    public string? PeriodKey { get; set; }
+    public bool IsPeriodCoherent { get; set; }
 }

@@ -13,10 +13,10 @@ public static class RawRowParser
         rawRow.RawLine = line;
         rawRow.LineNumber = rowId;
 
-        if (parts.Length != 5)
+        if (parts.Length != 6)
         {
             rawRow.IsParseable = false;
-            rawRow.ParseError = $"Expected 5 parts but got {parts.Length}";
+            rawRow.ParseError = $"Expected 6 parts but got {parts.Length}";
 
             return rawRow;
         }
@@ -37,7 +37,7 @@ public static class RawRowParser
             return rawRow;
         }
 
-        if(parts[2].Trim()== string.Empty)
+        if (parts[2].Trim() == string.Empty)
         {
             rawRow.IsParseable = false;
             rawRow.ParseError = "PolicyNumber is empty";
@@ -47,7 +47,7 @@ public static class RawRowParser
         rawRow.BrokerId = parts[1].Trim();
         rawRow.PolicyNumber = parts[2].Trim();
 
-        if (!decimal.TryParse(parts[3].Trim(),CultureInfo.InvariantCulture, out var premiumAmount))
+        if (!decimal.TryParse(parts[3].Trim(), CultureInfo.InvariantCulture, out var premiumAmount))
         {
             rawRow.IsParseable = false;
             rawRow.ParseError = $"Invalid PremiumAmount: {parts[3].Trim()}";
@@ -68,6 +68,21 @@ public static class RawRowParser
         {
             rawRow.CommissionRate = commissionRate;
         }
+        //Commission Rate Checks
+        if (!DateTimeOffset.TryParseExact(
+                parts[5].Trim(),
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var effectiveDate))
+        {
+            rawRow.IsParseable = false;
+            rawRow.ParseError = $"Invalid EffectiveDate: {parts[5].Trim()}";
+            return rawRow;
+        }
+
+        rawRow.EffectiveDate = effectiveDate;
+        rawRow.PeriodKey = effectiveDate.ToString("yyyy-MM", CultureInfo.InvariantCulture);
         rawRow.IsParseable = true;
         return rawRow;
     }

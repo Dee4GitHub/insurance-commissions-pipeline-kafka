@@ -11,6 +11,7 @@ public class CommissionsDBContext : DbContext
     public DbSet<ProcessedRow> ProcessedRows { get; set; } = default!;
     public DbSet<BrokerTier> BrokerTiers { get; set; } = default!;
     public DbSet<OutboxMessage> OutboxMessages { get; set; } = default!;
+    public DbSet<Period> Periods { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -94,6 +95,60 @@ public class CommissionsDBContext : DbContext
         modelBuilder.Entity<OutboxMessage>()
             .Property(o => o.LastError)
             .HasMaxLength(2000);
+
+        modelBuilder.Entity<Period>()
+            .HasKey(p => p.PeriodKey);
+
+        modelBuilder.Entity<Period>()
+            .Property(p => p.PeriodKey)
+            .HasMaxLength(7)
+            .IsFixedLength();
+
+        modelBuilder.Entity<Period>().HasData(
+            new Period
+            {
+                PeriodKey = "2026-07",
+                Status = PeriodStatus.Closed,
+                OpenedAt = new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
+                ClosedAt = new DateTimeOffset(2026, 8, 5, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Period
+            {
+                PeriodKey = "2026-08",
+                Status = PeriodStatus.Open,
+                OpenedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Period
+            {
+                PeriodKey = "2026-09",
+                Status = PeriodStatus.Open,
+                OpenedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Period
+            {
+                PeriodKey = "2026-10",
+                Status = PeriodStatus.Open,
+                OpenedAt = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero)
+            }
+        );
+
+        modelBuilder.Entity<RawRow>()
+            .Property(rr => rr.PeriodKey)
+            .HasMaxLength(7)
+            .IsFixedLength();
+
+        modelBuilder.Entity<ProcessedRow>()
+            .Property(pr => pr.PeriodKey)
+            .HasMaxLength(7)
+            .IsFixedLength();
+
+        modelBuilder.Entity<ProcessedRow>()
+            .HasIndex(pr => pr.PeriodKey);
+
+        modelBuilder.Entity<Batch>()
+            .Property(b => b.PeriodKey)
+            .HasMaxLength(7)
+            .IsFixedLength();
     }
 
 }

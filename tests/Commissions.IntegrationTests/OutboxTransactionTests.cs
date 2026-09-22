@@ -19,7 +19,10 @@ public class OutboxTransactionsTests : IClassFixture<DatabaseFixture>
         BatchId = batchId,
         BrokerId = "B100",
         CommissionAmount = 12.34m,
-        ProcessedAt = DateTimeOffset.UtcNow
+        ProcessedAt = DateTimeOffset.UtcNow,
+        EffectiveDate = new DateTimeOffset(2026, 8, 14, 0, 0, 0, TimeSpan.Zero),
+        PeriodKey = "2026-08",
+        RateAsOf = DateTimeOffset.UtcNow
     };
 
     private static OutboxMessage NewMessage(string batchId, string dedupeKey) => new()

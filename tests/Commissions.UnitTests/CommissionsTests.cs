@@ -1,4 +1,5 @@
 namespace Commissions.Tests;
+
 public class CommissionsTests
 {
     [Fact]
@@ -46,9 +47,12 @@ public class CommissionsTests
     [Theory]
     [InlineData("")]
     [InlineData("3,B100")]
-    [InlineData("3,B100,POL-0003,3989.3,0.15,EXTRA")]
-    [InlineData("3,B100,POL-0003,3989.3,NOT_A_NUMBER")]
-    [InlineData("3,B100,POL-0003,3989.3,0.15,")]
+    [InlineData("3,B100,POL-0003,3989.3,0.15")]                          // too few now
+    [InlineData("3,B100,POL-0003,3989.3,0.15,2026-08-14,EXTRA")]         // too many
+    [InlineData("3,B100,POL-0003,3989.3,NOT_A_NUMBER,2026-08-14")]
+    [InlineData("3,B100,POL-0003,3989.3,0.15,")]                         // empty date
+    [InlineData("3,B100,POL-0003,3989.3,0.15,14/08/2026")]               // wrong format
+    [InlineData("3,B100,POL-0003,3989.3,0.15,2026-13-01")]               // impossible month
     public void Parse_RejectsMalformedLine(string line)
     {
         var result = RawRowParser.Parse(line, 1, "batch1");
@@ -57,9 +61,9 @@ public class CommissionsTests
     }
 
     [Theory]
-    [InlineData("3,B100,POL-0003,3989.3,0.15", "B100", "POL-0003", 3989.3, 0.15)]
-    [InlineData("  3 , B100 , POL-0003 , 3989.3 , 0.15  ", "B100", "POL-0003", 3989.3, 0.15)]
-    public void Parse_ReadsFields(string line, string brokerId, string policy, double premium, double rate)
+    [InlineData("3,B100,POL-0003,3989.3,0.15,2026-08-14", "B100", "POL-0003", 3989.3, 0.15, "2026-08")]
+    [InlineData("  3 , B100 , POL-0003 , 3989.3 , 0.15 , 2026-08-14  ", "B100", "POL-0003", 3989.3, 0.15, "2026-08")]
+    public void Parse_ReadsFields(string line, string brokerId, string policy, double premium, double rate, string periodKey)
     {
         var result = RawRowParser.Parse(line, 1, "batch1");
         Assert.True(result.IsParseable);
@@ -68,6 +72,7 @@ public class CommissionsTests
         Assert.Equal(policy, result.PolicyNumber);
         Assert.Equal((decimal)premium, result.PremiumAmount);
         Assert.Equal((decimal)rate, result.CommissionRate);
+        Assert.Equal(periodKey, result.PeriodKey);
     }
 
     [Fact]

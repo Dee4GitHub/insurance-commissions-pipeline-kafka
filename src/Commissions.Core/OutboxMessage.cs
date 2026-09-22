@@ -16,4 +16,5 @@ public class OutboxMessage
     public DateTimeOffset? LockedUntil { get; set; }
     public string? LockedBy { get; set; }
     public DateTimeOffset? SentAt { get; set; }
+    public DateTimeOffset? FailedAt { get; set; }
 }
