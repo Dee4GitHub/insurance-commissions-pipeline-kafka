@@ -53,3 +53,10 @@ run.bat
 # NOTE: docs/DESIGN.md is the PUBLIC design document and IS committed.
 # The files above are private working notes - they quote conversations and
 # record dead ends. Keep that split deliberate when adding new documents.
+
+# Prose linting is NOT configured per project. The Vale config and the public-document
+# checklist live in ~/.claude/reference/ and are backed up in
+# D:/Training/ClaudeSkills/config/reference/. Run Vale with an explicit config:
+#   vale --config="C:/Users/deepa/.claude/reference/vale.ini" docs/DESIGN.md
+# This entry stays so a stray local run does not commit the downloaded style package.
+.vale-styles/
