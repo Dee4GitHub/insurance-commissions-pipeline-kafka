@@ -8,4 +8,5 @@ public interface IOutboxRepository
     Task MarkDeadAsync(long outboxId, string error, CancellationToken ct);
     Task MarkSuppressedAsync(long outboxId, string reason, CancellationToken ct);
     Task<bool> IsPeriodOpenAsync(string periodKey, CancellationToken ct);
+    Task<IReadOnlyList<string>> FindUnenqueuedCompleteBatchesAsync(int max, CancellationToken ct);
 }

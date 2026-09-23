@@ -210,7 +210,7 @@ public class Worker(
                     var summary = await repository.GetBatchSummaryAsync(batchId, tx, ct);
 
                     await repository.AddOutboxMessageAsync(
-                        BuildNotification(summary), tx, ct);
+                        BatchNotification.From(summary), tx, ct);
 
                     await tx.CommitAsync(ct);
 
@@ -232,18 +232,4 @@ public class Worker(
             logger.LogError(ex, "Could not check batch completion");
         }
     }
-
-    private static OutboxMessage BuildNotification(BatchSummary summary) => new()
-    {
-        MessageType = "BatchCompletedNotification",
-        AggregateId = summary.BatchId,
-        DedupeKey = $"batch-completed:{summary.BatchId}",
-        Payload = JsonSerializer.Serialize(summary),
-        OccurredAt = summary.CompletedAt,
-        AvailableAt = DateTimeOffset.UtcNow,
-        Status = OutboxStatus.Pending,
-        AttemptCount = 0,
-        PeriodKey = summary.PeriodKey,
-        IsPeriodCoherent = summary.IsPeriodCoherent
-    };
 }

@@ -12,6 +12,8 @@ public class Worker(
         var config = options.Value;
         var drainInterval = TimeSpan.FromSeconds(config.DrainIntervalSeconds);
         var consecutiveFailures = 0;
+        var backstopInterval = TimeSpan.FromSeconds(config.BackstopIntervalSeconds);
+        var lastBackstop = DateTimeOffset.MinValue;
 
         logger.LogInformation("Notifier {InstanceId} started", _instanceId);
 
@@ -21,6 +23,17 @@ public class Worker(
             {
                 var claimed = await DrainOnceAsync(config, stoppingToken);
                 consecutiveFailures = 0;
+
+                // THIS PLACEMENT IS THE M10 RULE: the backstop only runs on an iteration where
+                // the drain just succeeded, so it is skipped entirely while the drain is
+                // failing. Do not move it above the drain.
+                // lastBackstop is stamped BEFORE running, so a failing backstop waits a full
+                // interval rather than retrying on every loop.
+                if (DateTimeOffset.UtcNow - lastBackstop >= backstopInterval)
+                {
+                    lastBackstop = DateTimeOffset.UtcNow;
+                    await BackstopOnceAsync(config, stoppingToken);
+                }
 
                 // Nothing waiting: sleep. Work found: go straight round again, because
                 // there may be more.
@@ -130,7 +143,7 @@ public class Worker(
         }
     }
 
-    // Exponential, capped, with jitter. THEthout it every
+    // Exponential, capped, with jitter. The jitter matters: without it every
     // message that failed during the same outage retries in the same instant, forever.
     private static int BackoffSeconds(int attemptCount, NotifierConfigOptions config)
     {
@@ -166,4 +179,59 @@ public class Worker(
 
         return null;
     }
+    // Finds completed batches that have no outbox row and writes one, using the same
+    // transaction path and the same message builder as the Consolidator. In a healthy
+    // system this finds nothing, so every batch it finds is logged as a WARNING.
+    private async Task BackstopOnceAsync(NotifierConfigOptions config, CancellationToken ct)
+    {
+        IReadOnlyList<string> batchIds;
+
+        using (var scope = serviceScopeFactory.CreateScope())
+        {
+            var outbox = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+            batchIds = await outbox.FindUnenqueuedCompleteBatchesAsync(config.BatchSize, ct);
+        }
+
+        foreach (var batchId in batchIds)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                break;
+            }
+
+            // A NEW SCOPE PER BATCH. If oneys tracked in that
+            // DbContext as Added; a shared context would try to insert it again on the next
+            // batch's SaveChanges and fail
+            using var scope = serviceScopeFactory.CreateScope();
+            var commissions = scope.ServiceProvider.GetRequiredService<ICommissionRepository>();
+
+            try
+            {
+                await using var tx = await commissions.BeginTransactionAsync(ct);
+
+                var summary = await commissions.GetBatchSummaryAsync(batchId, tx, ct);
+                await commissions.AddOutboxMessageAsync(BatchNotification.From(summary), tx, ct);
+
+                await tx.CommitAsync(ct);
+
+                logger.LogWarning(
+                    "BACKSTOP enqueued batch {BatchId}. It was Complete with " +
+                    "no outbox row - either it predates the outbox, or some path completed it " +
+                    "without writing one.",
+                    batchId);
+            }
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+            {
+                // Another Notifier instance enqueued it first. That is the correct outcome.
+                logger.LogInformation(
+                    "Batch {BatchId} was enqueued by another instance first", batchId);
+            }
+        }
+    }
+
+    // 2601 = duplicate key in a unique INDEunique or primary
+    // key CONSTRAINT (sys.messages, language_id 1033). DedupeKey is a unique index, so
+    // 2601 is the one expected here; 2627 imade a constraint.
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is SqlException { Number: 2601 or 2627 };
 }

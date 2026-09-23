@@ -149,6 +149,18 @@ public class CommissionsDBContext : DbContext
             .Property(b => b.PeriodKey)
             .HasMaxLength(7)
             .IsFixedLength();
+
+        modelBuilder.Entity<Batch>()
+            .Property(b => b.Status)
+            .HasMaxLength(20);
+
+        // The backstop reads only batches that have never been notified. The filter keeps
+        // this index small however large Batches grows: a row leaves the index the moment
+        // NotifiedAt is stamped.
+        modelBuilder.Entity<Batch>()
+            .HasIndex(b => b.Status)
+            .HasDatabaseName("IX_Batches_Notification")
+            .HasFilter("[NotifiedAt] IS NULL");
     }
 
 }

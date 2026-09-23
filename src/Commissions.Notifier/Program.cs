@@ -5,6 +5,7 @@ builder.Services.AddHostedService<Worker>();
 builder.Services.AddOptions<NotifierConfigOptions>()
     .Bind(builder.Configuration.GetSection(NotifierConfigOptions.SectionName))
     .Validate(o => o.DrainIntervalSeconds > 0, "DrainIntervalSeconds must be greater than zero.")
+    .Validate(o => o.BackstopIntervalSeconds > 0, "BackstopIntervalSeconds must be greater than zero.")
     .Validate(o => o.BatchSize > 0, "BatchSize must be greater than zero.")
     .Validate(o => o.LeaseSeconds > 0, "LeaseSeconds must be greater than zero.")
     .Validate(o => o.MaxAttempts > 0, "MaxAttempts must be greater than zero.")
@@ -31,6 +32,10 @@ builder.Services.AddScoped<INotificationSender, CosmosNotificationSender>();
 builder.Services.AddDbContext<CommissionsDBContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("CommissionsDb")));
 builder.Services.AddScoped<IOutboxRepository, OutboxRepository>();
+
+// The backstop reuses the Consolidator's transaction path (BeginTransactionAsync,
+// GetBatchSummaryAsync, AddOutboxMessageAsync), so it needs the same repository.
+builder.Services.AddScoped<ICommissionRepository, CommissionsRepository>();
 var host = builder.Build();
 
 // The emulator starts empty, so create the database and container if they are not there.

@@ -83,4 +83,22 @@ public class OutboxRepository : IOutboxRepository
             .AsNoTracking()
             .AnyAsync(p => p.PeriodKey == periodKey && p.Status == PeriodStatus.Open, ct);
     }
+
+    // Completed batches that have NO outbox row in ANY status (B1). A Suppressed or Dead
+    // row means the batch was already handled - re-enqueueing it would only hit the unique
+    // DedupeKey index on every scan. Matched on AggregateId because it is indexed.
+    // Oldest first, and bounded, so one scan cannot build thousands of summaries.
+    public async Task<IReadOnlyList<string>> FindUnenqueuedCompleteBatchesAsync(
+        int max, CancellationToken ct)
+    {
+        return await _dbContext.Batches
+            .AsNoTracking()
+            .Where(b => b.Status == "Complete"
+                     && b.NotifiedAt == null
+                     && !_dbContext.OutboxMessages.Any(o => o.AggregateId == b.BatchId))
+            .OrderBy(b => b.CompletedAt)
+            .Select(b => b.BatchId)
+            .Take(max)
+            .ToListAsync(ct);
+    }
 }
