@@ -11,4 +11,9 @@ public class NotifierConfigOptions
     public int MaxAttempts { get; set; }
     public int BaseBackoffSeconds { get; set; }
     public int MaxBackoffSeconds { get; set; }
+
+    // TEST ONLY. When true, the process kills itself straight after a successful send and
+    // before the outbox row is marked Sent. Never set in appsettings - pass it on the
+    // command line for the kill/restart experiment.
+    public bool CrashAfterSend { get; set; }
 }

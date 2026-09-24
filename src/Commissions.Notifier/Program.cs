@@ -28,7 +28,16 @@ builder.Services.AddSingleton(sp =>
     sp.GetRequiredService<CosmosClient>()
       .GetContainer("commissions", "notifications"));
 
-builder.Services.AddScoped<INotificationSender, CosmosNotificationSender>();
+if (builder.Configuration.GetValue<bool>("Notifier:CrashAfterSend"))
+{
+    // TEST ONLY - see CrashAfterSendNotificationSender.
+    builder.Services.AddScoped<CosmosNotificationSender>();
+    builder.Services.AddScoped<INotificationSender, CrashAfterSendNotificationSender>();
+}
+else
+{
+    builder.Services.AddScoped<INotificationSender, CosmosNotificationSender>();
+}
 builder.Services.AddDbContext<CommissionsDBContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("CommissionsDb")));
 builder.Services.AddScoped<IOutboxRepository, OutboxRepository>();
