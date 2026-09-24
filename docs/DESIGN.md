@@ -317,6 +317,45 @@ Each delay also carries a small random adjustment. Without it, every message tha
 same moment would retry at the same moment, and would keep colliding on every attempt after
 that.
 
+### Finding batches that were never queued
+
+> **As whoever is on support, I want a finished batch with nothing queued to be found
+> automatically, so that no agency waits for a message that is never going to arrive.**
+
+A batch completed through the transaction above always has an outbox row, because the row and
+the completion are written together. A batch that completed before the outbox existed has no
+row, and it will never get one through that transaction, because a batch is marked complete
+only once.
+
+The notifier has a sending loop, which sends the waiting outbox rows. Alongside it, the
+notifier runs a scan. The scan looks for batches that are complete and have no outbox row, and
+queues a notification for each one. It uses the same code that builds the notification when a
+batch completes, so a batch queued by the scan gets the same identifier it would have got at
+completion.
+
+Each outbox row carries the identifier of its notification, and the database accepts only one
+row with any given identifier. The rule covers rows that have already been sent, and rows set
+aside after repeated failures, as well as the rows that are still waiting.
+
+The scan leaves a batch alone when the batch already has an outbox row, whatever state the row
+is in. A row can be held back because its batch was flagged for review under the date checks in
+section 8, or set aside after repeated failures. A held-back row records a decision not to
+send, and a set-aside row needs a person to find out why it kept failing. The database would
+refuse a second row for either batch anyway, because of the identifier rule above. Skipping
+these batches keeps the scan from attempting the same refused insert on every run.
+
+The scan runs at most once a minute, and only straight after a pass of the sending loop that
+finished without a database error. While the database is failing, every pass of the sending
+loop fails, so the scan does not run and adds no load to a database that is already struggling.
+
+Two notifier processes can run the scan at the same moment and both try to queue the same
+batch. Because of the identifier rule above, the database refuses the second insert. The
+process that tried it treats the refusal as a sign that the batch is already queued.
+
+Each batch the scan finds is logged as a warning. Once the batches that completed before the
+outbox existed have been queued, the scan should find nothing. If it finds a batch after that
+point, some code path has completed a batch without writing an outbox row.
+
 ---
 
 ## 8. Dates, and why a row identifier is not enough
@@ -429,6 +468,19 @@ completed, and it is picked up again.
 The row is retried, and the receiving end rejects the duplicate because the identifier is
 already present. The agency does not receive a second notification.
 
+This case has been tested by causing it on purpose. When the notifier is started with
+`--Notifier:CrashAfterSend=true`, it ends its own process immediately after writing a document
+and before marking the outbox row as sent. In the test, the notifier was then restarted
+normally, and the row was picked up again once its lease had expired. The document store
+refused the second write because a document with that identifier already existed. The notifier
+treated the refusal as proof that the earlier send had succeeded and marked the row as sent. At
+the end of the test the store held one document for the batch.
+
+The `CrashAfterSend` setting exists only for this test. It is off unless it is passed on the
+command line. Turning it on replaces the component that writes to the document store with a
+wrapper, which writes the document and then stops the process. The rest of the notifier runs
+unchanged.
+
 **A message that can never be processed**
 
 The message is retried and keeps failing, and it blocks its partition while it does. Nothing on
@@ -465,13 +517,6 @@ parsed ones. A file where three rows need fixing is therefore reported as finish
 three remain outstanding. The agency should instead be told how many rows were processed and
 how many need attention, and hear nothing further until the outstanding rows are resolved.
 
-**Picking up batches that completed before the outbox existed**
-
-A batch is marked complete once, and the guard that makes that safe also prevents it being
-marked complete a second time. Batches finished before notifications were recorded this way
-therefore have nothing queued to send, and never will. A slower background scan should find
-them and queue one.
-
 **Reading the database transaction log to drive the outbox**
 
 Polling for waiting rows costs a query per interval and adds latency up to one interval.
@@ -495,8 +540,9 @@ and the result is confusion over which consumer owns what rather than any loss o
 
 Outbox rows are inserted and never deleted, so the table only ever grows. Sent rows will need
 archiving before this pipeline runs in production for any length of time. Until then, the
-growth does not slow the active path, because the index covers only the rows that are still
-waiting.
+growth does not slow the sending loop. The index that the sending loop reads is ordered by the
+state of each row first, so a lookup goes straight to the waiting rows and never reads the sent
+ones.
 
 **Rates that change over time**
 
